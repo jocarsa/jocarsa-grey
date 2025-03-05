@@ -1,149 +1,75 @@
 <?php
 /**
  * ----------------------------------------------------------------------------
- * ODS → SQLite Importer with Basic Formula-to-PHP Generation
+ * ODS → SQLite Importer with Basic Formula-to-PHP Generation and Extended Foreign Key Support
  * ----------------------------------------------------------------------------
  *
- * 1) Downloads an ODS from $miurl.
- * 2) Extracts content.xml.
- * 3) Creates a SQLite DB named "$nombrebasededatos.db".
- * 4) Builds tables for each sheet, inserts rows.
- * 5) Detects formula cells (via table:formula).
- * 6) Generates "method" .php files that contain real PHP code to evaluate the formula.
+ * This importer:
+ *  1) Downloads an ODS file from a URL.
+ *  2) Extracts content.xml.
+ *  3) Creates a SQLite database named "$nombrebasededatos.db".
+ *  4) Creates a table for each sheet.
+ *  5) Inserts rows from the sheet.
+ *  6) Detects formula cells and generates PHP method files.
+ *  7) Implements extended foreign key conversion:
+ *     - If a header cell is named following the pattern: 
+ *         [ReferencedTable]_[DisplayCol1] or
+ *         [ReferencedTable]_[DisplayCol1]_[DisplayCol2] or more,
+ *       then:
+ *         a) The column in the main table is created as INTEGER.
+ *         b) The referenced table is created with the specified display columns.
+ *         c) During import, display values (e.g. "Juan" or "Juan Garcia") are replaced by the referenced record’s ID.
  *
  * Usage:
  *   require 'odsasqlite.php';
- *   odsasqlite($url, $nombreDBWithoutExtension);
- *
- * The importer expects a 'metodos' folder **one level up** from this file's directory
- * (adjust path inside the code if you prefer a different location).
- * Make sure that folder is writable by PHP.
+ *   odsasqlite($miurl, $nombrebasededatos);
  *
  * ----------------------------------------------------------------------------
- * IMPORTANT: This is a simplified demonstration. It does NOT handle:
- * - Multi-sheet references
- * - Range references like [.B2:.B5]
- * - Column letters beyond "Z"
- * - Many built-in ODS functions
- * - Complex formula error checking
- * - Security concerns with generating/evaluating code
+ * NOTE: This is a simplified demonstration and does not cover all edge cases.
  * ----------------------------------------------------------------------------
  */
-
+include "parseFormula.php";
 /**
- * Convert a raw ODS formula string (e.g. "of:=[.C7]*0.21") to a snippet of PHP code
- * (e.g. "$this->cellVal(\$row['precio']) * 0.21"), given a map of column letters → DB fields.
- *
- * Minimal handling of:
- *   - Removing `of:=`
- *   - Replacing `[.A1]` with `$this->cellVal($row['...'])`
- *   - Basic arithmetic operators (+ - * / ^)
- *   - A few ODS function synonyms (SUM, ROUND, etc.)
- */
-function parseOdsFormulaToPhp($odsFormula, $colMap = [])
-{
-    // Remove "of:=" prefix if present
-    $formula = preg_replace('/^of:=/i', '', trim($odsFormula));
-
-    // Replace references `[.Xnn]` or `[.XYnn]` (we only handle A-Z for demo).
-    // We'll ignore the row number, focusing on the column letter(s).
-    // Regex captures column letters in $matches[1], row number in $matches[2].
-    $formula = preg_replace_callback(
-        '/\[\.([A-Z]+)(\d+)\]/i', // e.g. "[.C7]" -> "C" "7"
-        function ($matches) use ($colMap) {
-            $colLetter = strtoupper($matches[1]); // e.g. "C"
-            // rowNumber = $matches[2]; // e.g. "7" (ignored in simplistic approach)
-
-            if (isset($colMap[$colLetter])) {
-                $fieldName = $colMap[$colLetter];
-                // Return a snippet that references $row['<fieldName>'] as a float
-                return "\$this->cellVal(\$row['$fieldName'])";
-            } else {
-                // If no known mapping, fallback to zero or comment
-                return "(/*unknown_col_$colLetter*/ 0)";
-            }
-        },
-        $formula
-    );
-
-    // Map certain ODS function calls to pseudo-PHP functions.
-    // This is incomplete and only handles a few known names.
-    $mapFunctions = [
-        '/\bSUM\s*\(/i'   => '$this->sum(',
-        '/\bROUND\s*\(/i' => '$this->roundVal(',
-        // add more if desired
-    ];
-    foreach ($mapFunctions as $pattern => $replacement) {
-        $formula = preg_replace($pattern, $replacement, $formula);
-    }
-
-    // The formula may now look like: "$this->cellVal($row['precio']) * 0.21"
-    return $formula;
-}
-
-/**
- * Convert a cell string (e.g. "34.00 €") to a float.
- * You can expand or adapt as needed.
- */
-function cellVal($val)
-{
-    $num = preg_replace('/[^0-9.\-]+/', '', $val);
-    return floatval($num);
-}
-
-/**
- * Summation helper for minimal SUM(...) function usage.
- * Example usage: SUM( cellVal($row['col1']), cellVal($row['col2']) )
- */
-function sum(...$vals)
-{
-    $total = 0;
-    foreach ($vals as $v) {
-        $total += $v;
-    }
-    return $total;
-}
-
-/**
- * Round helper to mimic ROUND(value, precision) usage from ODS
- */
-function roundVal($val, $precision = 0)
-{
-    return round($val, $precision);
-}
-
-/**
- * Clean and normalize table column names (from the header row).
+ * Clean and normalize a column name.
  */
 function cleanColumnName($name) {
-    // Convert accented characters to their ASCII approximation
     $normalized = iconv('UTF-8', 'ASCII//TRANSLIT', $name);
-    // Replace non-alphanumeric chars with underscores
     $clean = preg_replace('/[^a-zA-Z0-9_]/', '_', $normalized);
-    // Remove duplicate underscores
     $clean = preg_replace('/_+/', '_', $clean);
-    // Trim underscores from beginning/end
     $clean = trim($clean, '_');
-    // If the cleaned name starts with a digit, prepend underscore
     if (preg_match('/^\d/', $clean)) {
         $clean = '_' . $clean;
     }
     return ($clean !== '') ? $clean : 'column';
 }
 
+/**
+ * Detect if a column name follows the foreign key pattern.
+ * Now, if the name contains at least one underscore (i.e. at least two parts),
+ * we consider it a foreign key field.
+ */
+function detectForeignKey($colName) {
+    $parts = explode('_', $colName);
+    if (count($parts) >= 2) {
+        return [
+            'referenced_table' => $parts[0],
+            'display_columns'  => array_slice($parts, 1),
+            'original_name'    => $colName
+        ];
+    }
+    return false;
+}
 
 /**
- * Main function: Download an ODS, parse content, build a SQLite DB,
- * detect formula cells, and generate "method" files.
+ * Main importer function.
  */
 function odsasqlite($miurl, $nombrebasededatos)
 {
-    // 1) Download the ODS file to a temp location
-    $url      = $miurl;
+    // 1) Download the ODS file to a temporary location
     $tempFile = tempnam(sys_get_temp_dir(), 'ods');
-    file_put_contents($tempFile, file_get_contents($url));
+    file_put_contents($tempFile, file_get_contents($miurl));
 
-    // 2) Extract content.xml from the ODS
+    // 2) Extract content.xml from the ODS file
     $zip = new ZipArchive;
     if ($zip->open($tempFile) === TRUE) {
         $xmlContent = $zip->getFromName('content.xml');
@@ -152,198 +78,213 @@ function odsasqlite($miurl, $nombrebasededatos)
         die("Error opening the ODS file.");
     }
 
-    // 3) Load the XML and retrieve namespaces
-    $xml        = simplexml_load_string($xmlContent);
+    // 3) Load XML and retrieve namespaces
+    $xml = simplexml_load_string($xmlContent);
     $namespaces = $xml->getNamespaces(true);
 
     // 4) Navigate to the <office:spreadsheet> element
-    $office      = $xml->children($namespaces['office']);
+    $office = $xml->children($namespaces['office']);
     $spreadsheet = $office->body->spreadsheet;
 
-    // 5) Create/Open SQLite DB
+    // 5) Create/Open SQLite DB using PDO
     try {
-        $db = new PDO('sqlite:'.$nombrebasededatos.'.db');
+        $db = new PDO('sqlite:' . $nombrebasededatos . '.db');
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     } catch (PDOException $e) {
         die("SQLite Connection failed: " . $e->getMessage());
     }
 
-    // Keep track of formulas found: $columnFormulas[tableName][columnIndex] = <formula>
+    // Keep track of formulas: $columnFormulas[tableName][columnIndex] = <formula>
     $columnFormulas = [];
 
-    // 6) Process each sheet (table:table)
+    // 6) Process each sheet
     $tables = $spreadsheet->children($namespaces['table'])->table;
     if ($tables) {
         foreach ($tables as $table) {
-            // 6a) Get sheet name & clean it
-            $tableAttrs      = $table->attributes($namespaces['table']);
-            $sheetName       = (string)$tableAttrs['name']; // e.g. "Hoja1"
-            $sheetNameClean  = preg_replace('/[^a-zA-Z0-9_]/', '_', $sheetName);
+            // 6a) Get sheet name and clean it
+            $tableAttrs = $table->attributes($namespaces['table']);
+            $sheetName = (string)$tableAttrs['name'];
+            $sheetNameClean = preg_replace('/[^a-zA-Z0-9_]/', '_', $sheetName);
             if (preg_match('/^\d/', $sheetNameClean)) {
-                $sheetNameClean = '_'.$sheetNameClean;
+                $sheetNameClean = '_' . $sheetNameClean;
             }
 
-            // Initialize array for this sheet
+            // Initialize foreign key mapping for this sheet (column index => meta data)
+            $fkMapping = [];
+
+            // Initialize formulas for this sheet
             $columnFormulas[$sheetNameClean] = [];
 
-            // 6b) Get all rows
-            $rows = $table->children($namespaces['table'])->{'table-row'};
-            if (!count($rows)) {
-                continue; // skip if no rows
-            }
-
-            // 6c) Process header row: build column names
-            $headerRow   = $rows[0];
+            // 6b) Process header row: build column names and detect foreign keys
+            $headerRow = $table->children($namespaces['table'])->{'table-row'}[0];
             $headerCells = $headerRow->children($namespaces['table'])->{'table-cell'};
-            $columns     = [];      // final array of cleaned column names
-            $colMapping  = [];      // position in row → index in $columns
-            $pos         = 0;
-
+            $columns = [];
+            $colMapping = [];
+            $pos = 0;
             foreach ($headerCells as $cell) {
                 $cellAttrs = $cell->attributes($namespaces['table']);
-                // may contain "number-columns-repeated"
-                $repeat = isset($cellAttrs['number-columns-repeated']) 
-                          ? (int)$cellAttrs['number-columns-repeated']
-                          : 1;
-
-                $text      = $cell->children($namespaces['text'])->{'p'};
+                $repeat = isset($cellAttrs['number-columns-repeated']) ? (int)$cellAttrs['number-columns-repeated'] : 1;
+                $text = $cell->children($namespaces['text'])->{'p'};
                 $cellValue = trim((string)$text);
-
                 for ($i = 0; $i < $repeat; $i++) {
                     if ($cellValue !== '') {
                         $colNameClean = cleanColumnName($cellValue);
-                        // avoid duplicates
+                        // Check for foreign key pattern (supporting one or more display columns)
+                        $fkData = detectForeignKey($colNameClean);
+                        if ($fkData) {
+                            $fkMapping[count($columns)] = $fkData;
+                        }
+                        // Avoid duplicate column names
                         $original = $colNameClean;
-                        $suffix   = 1;
+                        $suffix = 1;
                         while (in_array($colNameClean, $columns)) {
-                            $colNameClean = $original.'_'.$suffix;
+                            $colNameClean = $original . '_' . $suffix;
                             $suffix++;
                         }
-                        $columns[]        = $colNameClean;
+                        $columns[] = $colNameClean;
                         $colMapping[$pos] = count($columns) - 1;
                     }
                     $pos++;
                 }
             }
-
-            // Skip if no columns
             if (empty($columns)) {
                 continue;
             }
 
-            // 6d) Create the table (if not exists)
+            // 6c) Create the main table – use INTEGER for foreign key columns, TEXT otherwise
             $createSQL = "CREATE TABLE IF NOT EXISTS \"$sheetNameClean\" (id INTEGER PRIMARY KEY AUTOINCREMENT";
-            foreach ($columns as $col) {
-                $createSQL .= ", \"$col\" TEXT";
+            foreach ($columns as $idx => $col) {
+                if (isset($fkMapping[$idx])) {
+                    $createSQL .= ", \"$col\" INTEGER";
+                } else {
+                    $createSQL .= ", \"$col\" TEXT";
+                }
             }
             $createSQL .= ")";
             $db->exec($createSQL);
 
-            // Prepare the INSERT
-            $colList      = implode(', ', array_map(fn($c)=>"\"$c\"", $columns));
-            $placeholders = implode(', ', array_fill(0, count($columns), '?'));
-            $insertSQL    = "INSERT INTO \"$sheetNameClean\" ($colList) VALUES ($placeholders)";
-            $stmtInsert   = $db->prepare($insertSQL);
+            // 6d) Ensure referenced (foreign) tables exist
+            if (!empty($fkMapping)) {
+                foreach ($fkMapping as $meta) {
+                    $refTable = $meta['referenced_table'];
+                    $displayCols = $meta['display_columns'];
+                    $fkTableSQL = "CREATE TABLE IF NOT EXISTS \"$refTable\" (id INTEGER PRIMARY KEY AUTOINCREMENT";
+                    foreach ($displayCols as $col) {
+                        $fkTableSQL .= ", \"$col\" TEXT";
+                    }
+                    $fkTableSQL .= ")";
+                    $db->exec($fkTableSQL);
+                }
+            }
 
-            // 6e) Process data rows (skip row[0], the header)
+            // 6e) Prepare INSERT statement for the main table
+            $colList = implode(', ', array_map(fn($c) => "\"$c\"", $columns));
+            $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+            $insertSQL = "INSERT INTO \"$sheetNameClean\" ($colList) VALUES ($placeholders)";
+            $stmtInsert = $db->prepare($insertSQL);
+
+            // 6f) Process data rows (skip header)
+            $rows = $table->children($namespaces['table'])->{'table-row'};
             for ($r = 1; $r < count($rows); $r++) {
                 $rowElem = $rows[$r];
-                $cells   = $rowElem->children($namespaces['table'])->{'table-cell'};
+                $cells = $rowElem->children($namespaces['table'])->{'table-cell'};
                 $rowDataAll = [];
-                $pos       = 0;
-
+                $pos = 0;
                 foreach ($cells as $cell) {
                     $cellAttrs = $cell->attributes($namespaces['table']);
-                    $repeat    = isset($cellAttrs['number-columns-repeated']) 
-                                 ? (int)$cellAttrs['number-columns-repeated'] 
-                                 : 1;
-
-                    // Detect formula
+                    $repeat = isset($cellAttrs['number-columns-repeated']) ? (int)$cellAttrs['number-columns-repeated'] : 1;
+                    // Detect formula cells
                     if (isset($cellAttrs['formula'])) {
                         $cellFormula = (string)$cellAttrs['formula'];
-                        // For each repeated column position, note that formula
                         for ($rep = 0; $rep < $repeat; $rep++) {
-                            // If that position maps to a known column index...
                             if (isset($colMapping[$pos + $rep])) {
                                 $colIndex = $colMapping[$pos + $rep];
-                                // record this formula for the column
                                 $columnFormulas[$sheetNameClean][$colIndex] = $cellFormula;
                             }
                         }
                     }
-
-                    // Get the text
-                    $text      = $cell->children($namespaces['text'])->{'p'};
+                    $text = $cell->children($namespaces['text'])->{'p'};
                     $cellValue = trim((string)$text);
-
-                    // Store repeated times
                     for ($rep = 0; $rep < $repeat; $rep++) {
                         $rowDataAll[$pos] = $cellValue;
                         $pos++;
                     }
                 }
-
-                // Build final row data for columns
                 $finalRow = array_fill(0, count($columns), '');
                 foreach ($colMapping as $cellPos => $colIndex) {
                     $finalRow[$colIndex] = $rowDataAll[$cellPos] ?? '';
                 }
-
-                // Skip if entire row is empty
+                // Skip entirely empty rows
                 $allEmpty = true;
                 foreach ($finalRow as $val) {
-                    if ($val !== '') {
-                        $allEmpty = false;
-                        break;
+                    if ($val !== '') { $allEmpty = false; break; }
+                }
+                if ($allEmpty) { continue; }
+
+                // 6g) Process foreign key columns: convert display text into the referenced record’s id
+                if (!empty($fkMapping)) {
+                    foreach ($fkMapping as $colIndex => $fkMeta) {
+                        $cellValue = $finalRow[$colIndex];
+                        if (trim($cellValue) === '') continue;
+                        $refTable = $fkMeta['referenced_table'];
+                        $displayColumns = $fkMeta['display_columns'];
+                        // Split the display value using whitespace (adjust if needed)
+                        $parts = preg_split('/\s+/', trim($cellValue));
+                        while (count($parts) < count($displayColumns)) {
+                            $parts[] = '';
+                        }
+                        $conditions = [];
+                        $params = [];
+                        foreach ($displayColumns as $i => $colName) {
+                            $conditions[] = "\"$colName\" = ?";
+                            $params[] = $parts[$i];
+                        }
+                        $whereClause = implode(" AND ", $conditions);
+                        $stmt = $db->prepare("SELECT id FROM \"$refTable\" WHERE $whereClause LIMIT 1");
+                        $stmt->execute($params);
+                        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+                        if ($result && isset($result['id'])) {
+                            $finalRow[$colIndex] = $result['id'];
+                        } else {
+                            $colsList = implode(', ', array_map(fn($col) => "\"$col\"", $displayColumns));
+                            $placeholdersFK = implode(', ', array_fill(0, count($displayColumns), '?'));
+                            $insertStmt = $db->prepare("INSERT INTO \"$refTable\" ($colsList) VALUES ($placeholdersFK)");
+                            $insertStmt->execute($params);
+                            $finalRow[$colIndex] = $db->lastInsertId();
+                        }
                     }
                 }
-                if ($allEmpty) {
-                    continue;
-                }
 
-                // Insert
+                // 6h) Insert the processed row into the main table
                 $stmtInsert->execute($finalRow);
             }
 
-            // Now we've inserted all rows for this sheet,
-            // let's generate "method" files for columns that had at least one formula
+            // 6i) Generate method files for columns that had formulas
             if (!empty($columnFormulas[$sheetNameClean])) {
-                // We'll place them in ../metodos/<TableName> relative to this file
-                // Adjust path if needed
                 $methodsRoot = __DIR__ . '/../metodos';
                 if (!is_dir($methodsRoot)) {
                     mkdir($methodsRoot, 0777, true);
                 }
-
                 $tableMethodsDir = $methodsRoot . "/$sheetNameClean";
                 if (!is_dir($tableMethodsDir)) {
                     mkdir($tableMethodsDir, 0777, true);
                 }
-
-                // Create a naive map A->columns[0], B->columns[1], etc. (only up to 26)
-                // If your sheet has more than 26 columns, you'd need a bigger approach
                 $alphabet = range('A','Z');
-                $colMap   = [];
+                $colMap = [];
                 foreach ($columns as $idx => $colName) {
                     if (isset($alphabet[$idx])) {
                         $colMap[$alphabet[$idx]] = $colName;
                     }
                 }
-
-                // For each formula column, generate the method file with real code
                 foreach ($columnFormulas[$sheetNameClean] as $colIdx => $rawFormula) {
-                    $colName   = $columns[$colIdx];
-                    $phpExpr   = parseOdsFormulaToPhp($rawFormula, $colMap);
-
+                    $colName = $columns[$colIdx];
+                    $phpExpr = parseOdsFormulaToPhp($rawFormula, $colMap);
                     $stub  = "<?php\n";
                     $stub .= "/**\n";
                     $stub .= " * Auto-generated method for column '$colName' (ODS formula: $rawFormula)\n";
-                    $stub .= " * This file attempts to replicate the formula in PHP.\n";
-                    $stub .= " * \n";
+                    $stub .= " * This file replicates the formula in PHP.\n";
                     $stub .= " * \$row is provided by run_method.php.\n";
                     $stub .= " */\n\n";
-
-                    // We define a small class or trait context so we can call $this->cellVal, etc.
                     $stub .= "class FormulaRunner {\n";
                     $stub .= "    public function cellVal(\$val) {\n";
                     $stub .= "        \$num = preg_replace('/[^0-9.\\-]+/', '', \$val);\n";
@@ -351,9 +292,7 @@ function odsasqlite($miurl, $nombrebasededatos)
                     $stub .= "    }\n\n";
                     $stub .= "    public function sum(...\$vals) {\n";
                     $stub .= "        \$total = 0;\n";
-                    $stub .= "        foreach (\$vals as \$v) {\n";
-                    $stub .= "            \$total += \$v;\n";
-                    $stub .= "        }\n";
+                    $stub .= "        foreach (\$vals as \$v) { \$total += \$v; }\n";
                     $stub .= "        return \$total;\n";
                     $stub .= "    }\n\n";
                     $stub .= "    public function roundVal(\$val, \$precision=0) {\n";
@@ -365,21 +304,16 @@ function odsasqlite($miurl, $nombrebasededatos)
                     $stub .= "        echo \"<p>Resultado: {\$result}</p>\";\n";
                     $stub .= "    }\n";
                     $stub .= "}\n\n";
-
-                    // Instantiate and run
                     $stub .= "\$runner = new FormulaRunner();\n";
                     $stub .= "\$runner->run(\$row);\n";
-
                     file_put_contents($tableMethodsDir . "/$colName.php", $stub);
                 }
             }
-
             echo "Processed sheet: $sheetName\n";
         }
     } else {
         echo "No sheets found in the document.\n";
     }
-
     unlink($tempFile);
 }
 

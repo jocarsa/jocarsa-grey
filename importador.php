@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if(empty($url) || empty($nombre)) {
         $error = t("error_both_required");
     } else {
-        // Import the ODS file
+        // Import the ODS file (foreign keys now support one or more display columns)
         odsasqlite($url, $nombre);
         
         // Create a config file
@@ -66,8 +66,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php else: ?>
             <form action="importador.php" method="POST">
                 <h3><?php echo t("importer_heading"); ?></h3>
-                <p class="importador-description"><?php echo t("importer_description"); ?></p>
-
+                <p class="importador-description">
+                  <?php 
+                    // Inform the user that extended foreign key support is active.
+                    echo t("importer_description") . " " . "Note: Foreign keys now support one or more display columns."; 
+                  ?>
+                </p>
                 <div class="form-group">
                     <label><?php echo t("enter_ods_url"); ?></label>
                     <input type="url" name="url" required>
