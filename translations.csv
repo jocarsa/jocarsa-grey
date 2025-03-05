@@ -1,0 +1,26 @@
+key,en,es,fr,de,it,ja,ko,zh
+login_title,Login,Iniciar sesión,Connexion,Anmelden,Accedi,ログイン,로그인,登录
+username,Username,Usuario,Nom d'utilisateur,Benutzername,Nome utente,ユーザー名,사용자 이름,用户名
+password,Password,Contraseña,Mot de passe,Passwort,Password,パスワード,비밀번호,密码
+login_button,Login,Entrar,Connexion,Anmelden,Accedi,ログイン,로그인,登录
+invalid_credentials,Invalid username or password.,Usuario o contraseña no válidos.,Identifiant ou mot de passe invalide.,Ungültiger Benutzername oder ungültiges Passwort.,Nome utente o password non validi.,ユーザー名またはパスワードが無効です。,잘못된 사용자 이름 또는 비밀번호입니다.,无效的用户名或密码。
+importer_title,jocarsa | grey - Importer,jocarsa | grey - Importador,jocarsa | grey - Importateur,jocarsa | grey - Importeur,jocarsa | grey - Importatore,jocarsa | grey - インポーター,jocarsa | grey - 가져오기,jocarsa | grey - 导入器
+importer_heading,jocarsa | grey Importer,Importador jocarsa | grey,Importateur jocarsa | grey,jocarsa | grey Importeur,Importatore jocarsa | grey,jocarsa | grey インポーター,jocarsa | grey 가져오기,jocarsa | grey 导入器
+importer_description,Import data from a Google Sheets ODS file...,Importa datos desde un archivo ODS de Google Sheets...,Importer des données à partir d'un fichier ODS Google Sheets...,Daten aus einer Google Sheets ODS-Datei importieren...,Importa dati da un file ODS di Google Sheets...,Google シート ODS ファイルからデータをインポート...,Google Sheets ODS 파일에서 데이터를 가져오기...,从 Google 表格 (ODS) 文件导入数据...
+enter_ods_url,Enter the URL of the Google Sheets ODS file:,Introduzca la URL del archivo ODS de Google Sheets:,Entrez l'URL du fichier ODS de Google Sheets :,Geben Sie die URL der Google Sheets ODS-Datei ein:,Inserisci l'URL del file ODS di Google Sheets:,Google シート ODS ファイルの URL を入力してください:,Google Sheets ODS 파일의 URL을 입력하세요:,输入 Google 表格 ODS 文件的 URL：
+enter_db_name,Enter the name for the new SQLite database:,Introduzca el nombre de la nueva base de datos SQLite:,Entrez le nom de la nouvelle base de données SQLite :,Geben Sie den Namen der neuen SQLite-Datenbank ein:,Inserisci il nome per il nuovo database SQLite:,新しい SQLite データベースの名前を入力してください:,새로운 SQLite 데이터베이스의 이름을 입력하세요:,输入新的 SQLite 数据库名称：
+error_both_required,Both URL and Database Name are required.,Se requieren la URL y el Nombre de la Base de Datos.,L'URL et le nom de la base de données sont requis.,Sowohl die URL als auch der Datenbankname sind erforderlich.,Sia l'URL che il nome del database sono obbligatori.,URL とデータベース名の両方が必要です。,URL과 데이터베이스 이름이 모두 필요합니다.,需要提供 URL 和数据库名称。
+import_success,Import process completed. Config file created.,Proceso de importación completado. Archivo de configuración creado.,Importation terminée. Fichier de configuration créé.,Importvorgang abgeschlossen. Konfigurationsdatei erstellt.,Processo di importazione completato. File di configurazione creato.,インポートが完了しました。設定ファイルが作成されました。,가져오기 프로세스가 완료되었습니다. 설정 파일이 생성되었습니다.,导入过程完成。已创建配置文件。
+go_dashboard,Go to Dashboard,Ir al Panel de Control,Aller au Tableau de bord,Zum Dashboard gehen,Vai alla Dashboard,ダッシュボードへ移動,대시보드로 이동,前往仪表板
+dashboard_title,Dashboard - jocarsa | grey,Panel de Control - jocarsa | grey,Tableau de bord - jocarsa | grey,Dashboard - jocarsa | grey,Dashboard - jocarsa | grey,ダッシュボード - jocarsa | grey,대시보드 - jocarsa | grey,仪表板 - jocarsa | grey
+hello,Hello,Hola,Bonjour,Hallo,Ciao,こんにちは,안녕하세요,你好
+logout,Logout,Cerrar sesión,Déconnexion,Abmelden,Disconnetti,ログアウト,로그아웃,退出
+tables,Tables,Tablas,Tables,Tabellen,Tabelle,テーブル,테이블,数据表
+relaunch_importer,Re-launch Importer,Re-lanzar Importador,Relancer l'importateur,Importer erneut starten,Rilancia importatore,インポーターを再起動,가져오기 다시 시작,重新启动导入器
+select_table,Select a table from the left to manage its records.,Seleccione una tabla a la izquierda para gestionar sus registros.,Sélectionnez une table à gauche pour gérer ses enregistrements.,Wählen Sie links eine Tabelle aus, um die Datensätze zu verwalten.,Seleziona una tabella a sinistra per gestirne i record.,左側からテーブルを選択してレコードを管理します。,왼쪽에서 테이블을 선택하여 레코드를 관리하세요.
+create_new_record,Create New Record,Crear Nuevo Registro,Créer un nouvel enregistrement,Neuen Datensatz erstellen,Crea un nuovo record,新しいレコードを作成,새 레코드 생성,创建新记录
+edit_record,Edit Record,Editar Registro,Modifier l'enregistrement,Datensatz bearbeiten,Modifica record,レコードを編集,레코드 편집,编辑记录
+cancel,Cancel,Cancelar,Annuler,Abbrechen,Annulla,キャンセル,취소,取消
+records,Records,Registros,Enregistrements,Datensätze,Record,レコード,레코드,记录
+delete_record,Delete record?,¿Eliminar registro?,Supprimer l'enregistrement ?,Datensatz löschen?,Eliminare il record?,このレコードを削除しますか？,레코드를 삭제하시겠습니까?,删除记录？
+go_importador,Go to Importer,Ir al Importador,Aller à l'importateur,Zum Importeur wechseln,Va all'Importatore,インポーターへ移動,가져오기 페이지로 이동,前往导入器

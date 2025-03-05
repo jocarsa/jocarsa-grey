@@ -130,7 +130,7 @@ form textarea {
     margin-bottom: 10px;
     box-sizing: border-box;
 }
-form input[type="submit"] {
+form input[type="submit"],.boton {
     padding: 10px 15px;
     background-color: #0073aa;
     border: none;
@@ -138,6 +138,8 @@ form input[type="submit"] {
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.3s;
+    text-decoration:none;
+    font-size:10px;
 }
 form input[type="submit"]:hover {
     background-color: #006799;
@@ -159,3 +161,86 @@ form.inline {
     font-weight: bold;
     color: grey; /* Optional: change text color */
 }
+hr{
+	margin-bottom:10px;
+}
+/* style.css (existing content not repeated here) */
+/* ...existing rules... */
+
+/* Add new "awesome" CSS for the importer here */
+
+.importador-container {
+    background: linear-gradient(135deg, #e0ebf5 0%, #ffffff 100%);
+    max-width: 800px;
+    margin: 30px auto;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.importador-container h3 {
+    margin-top: 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.importador-description {
+    font-size: 0.9em;
+    margin-bottom: 20px;
+    line-height: 1.5;
+    color: #444;
+}
+
+.importador-container .form-group {
+    margin-bottom: 20px;
+}
+
+.importador-container label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.importador-container input[type="url"],
+.importador-container input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.importador-container .btn-submit {
+    padding: 10px 15px;
+    background-color: #0073aa;
+    border: none;
+    color: #ffffff;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    font-size: 0.9em;
+}
+
+.importador-container .btn-submit:hover {
+    background-color: #006799;
+}
+
+.importador-container .example-url {
+    font-size: 0.8em;
+    color: #888;
+    margin-top: 10px;
+}
+
+.message-error {
+    color: #c00;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+.message-success {
+    color: green;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
