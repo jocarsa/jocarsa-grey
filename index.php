@@ -61,7 +61,7 @@ if (!isset($_SESSION['loggedin'])) {
                     <h1>jocarsa | grey - <?php echo t("login_title"); ?></h1>
                 </div>
             </div>
-            <div class="container">
+            <div class="container contenedorlogin">
                 <div class="main" style="width:100%;">
                     <h2><?php echo t("login_title"); ?></h2>
                     <?php if(isset($login_error)): ?>
