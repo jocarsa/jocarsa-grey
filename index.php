@@ -21,7 +21,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     exit;
 }
 
-// Handle login if not already logged in
+// 1) Handle login if not already logged in
 if (!isset($_SESSION['loggedin'])) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
         $db = new SQLite3($config['db_name']);
@@ -38,6 +38,7 @@ if (!isset($_SESSION['loggedin'])) {
         }
     }
     if (!isset($_SESSION['loggedin'])) {
+        // Show the login form and exit
         ?>
         <!doctype html>
         <html>
@@ -62,19 +63,22 @@ if (!isset($_SESSION['loggedin'])) {
                     <form method="post" action="index.php">
                         <label><?php echo t("username"); ?>:</label>
                         <input type="text" name="username" required>
+                        
                         <label><?php echo t("password"); ?>:</label>
                         <input type="password" name="password" required>
-                        <label><?php echo "Language:"; ?></label>
+                        
+                        <label>Language:</label>
                         <select name="lang">
-                            <option value="en"><?php echo "English"; ?></option>
-                            <option value="es"><?php echo "Español"; ?></option>
-                            <option value="fr"><?php echo "Français"; ?></option>
-                            <option value="de"><?php echo "Deutsch"; ?></option>
-                            <option value="it"><?php echo "Italiano"; ?></option>
-                            <option value="ja"><?php echo "日本語"; ?></option>
-                            <option value="ko"><?php echo "한국어"; ?></option>
-                            <option value="zh"><?php echo "中文"; ?></option>
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                            <option value="it">Italiano</option>
+                            <option value="ja">日本語</option>
+                            <option value="ko">한국어</option>
+                            <option value="zh">中文</option>
                         </select>
+                        
                         <input type="submit" name="login" value="<?php echo t("login_button"); ?>">
                     </form>
                 </div>
@@ -86,16 +90,104 @@ if (!isset($_SESSION['loggedin'])) {
     }
 }
 
-// Open the SQLite database using SQLite3
+// 2) If we reach here, user is logged in
 $db = new SQLite3($config['db_name']);
 
-/*
- * Helper functions for foreign keys:
- * - isForeignKey(): returns true if the column name contains at least one underscore.
- * - parseForeignKey(): splits the column name into [referencedTable, displayColumns].
- */
+// 3) Department selection: if department not chosen yet, show “pre-dashboard”
+if (!isset($_SESSION['department_id']) && !isset($_POST['department_id'])) {
+    // Fetch all departments
+    $res = $db->query("SELECT id, name FROM departments");
+    $departments = [];
+    while($dRow = $res->fetchArray(SQLITE3_ASSOC)) {
+        $departments[] = $dRow;
+    }
+
+    // Determine how many columns to use
+    $deptCount = count($departments);
+    $columns = 3; // default
+    if ($deptCount == 1) {
+        $columns = 1;
+    } elseif ($deptCount == 2) {
+        $columns = 2;
+    } elseif ($deptCount == 3) {
+        $columns = 3;
+    } elseif ($deptCount == 4) {
+        // 2 columns, so 2×2
+        $columns = 2;
+    } elseif ($deptCount == 5) {
+        // 3 columns (the 5th will wrap to next row)
+        $columns = 3;
+    } elseif ($deptCount == 6) {
+        // 3 columns, 2 rows (3×2)
+        $columns = 3;
+    } else {
+        // For more than 6, also do 3 columns
+        $columns = 3;
+    }
+    ?>
+    <!doctype html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Select Department</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+    <div class="header">
+        <div id="corporativo">
+            <img src="grey.png" alt="Logo">
+            <h1>Select a Department</h1>
+        </div>
+    </div>
+    
+    <!-- 
+       We apply a dynamic inline style to define the grid-template-columns 
+       according to $columns.
+    -->
+    <div class="department-grid-container" 
+         style="grid-template-columns: repeat(<?php echo $columns; ?>, 1fr);">
+        <?php foreach ($departments as $dep): ?>
+            <div class="department-grid-item">
+                <form method="POST" action="index.php">
+                    <input type="hidden" name="department_id" value="<?php echo $dep['id']; ?>">
+                    <button type="submit" class="department-button">
+                    <div class="letra"><?php echo htmlspecialchars($dep['name'])[0]; ?></div>
+                        <?php echo htmlspecialchars($dep['name']); ?>
+                    </button>
+                </form>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+// 4) If user submitted a department choice, store in session
+if (isset($_POST['department_id'])) {
+    $_SESSION['department_id'] = $_POST['department_id'];
+}
+$department_id = $_SESSION['department_id'] ?? null;
+
+// 5) Retrieve only the tables that belong to the chosen department
+$tables = [];
+if ($department_id) {
+    $stmtDept = $db->prepare("
+        SELECT table_name
+        FROM department_tables
+        WHERE department_id = :depid
+    ");
+    $stmtDept->bindValue(':depid', $department_id, SQLITE3_INTEGER);
+    $resultDept = $stmtDept->execute();
+    while($rowDept = $resultDept->fetchArray(SQLITE3_ASSOC)) {
+        $tables[] = $rowDept['table_name'];
+    }
+}
+
+// 6) Helper functions for foreign keys
 function isForeignKey($colName) {
-    return substr_count($colName, '_') >= 1;
+    return (substr_count($colName, '_') >= 1);
 }
 function parseForeignKey($colName) {
     $parts = explode('_', $colName);
@@ -104,22 +196,20 @@ function parseForeignKey($colName) {
     return [$referencedTable, $displayColumns];
 }
 
-// Retrieve all table names (excluding SQLite internal tables)
-$result = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-$tables = [];
-while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-    $tables[] = $row['name'];
-}
+// 7) Determine if user selected a table from side menu
 $selected_table = isset($_GET['table']) ? $_GET['table'] : null;
 $action = isset($_GET['action']) ? $_GET['action'] : 'list';
 $crud_message = '';
+
+// Security check: if table is not in $tables, deny
 if ($selected_table && !in_array($selected_table, $tables)) {
-    die("Invalid table selected.");
+    die("Invalid or unauthorized table selected.");
 }
 
-// Handle CRUD operations if a table is selected
+// 8) Handle CRUD if a valid table is selected
 if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['create'])) {
+        // Insert a record
         $colsQuery = $db->query("PRAGMA table_info('$selected_table')");
         $fields = [];
         $values = [];
@@ -137,6 +227,7 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $action = 'list';
         }
     } elseif (isset($_POST['update'])) {
+        // Update a record
         $id = $_POST['id'];
         $colsQuery = $db->query("PRAGMA table_info('$selected_table')");
         $setParts = [];
@@ -153,6 +244,7 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $action = 'list';
         }
     } elseif (isset($_POST['delete'])) {
+        // Delete a record
         $id = $_POST['id'];
         $sql = "DELETE FROM \"$selected_table\" WHERE id='" . SQLite3::escapeString($id) . "'";
         $db->exec($sql);
@@ -169,46 +261,68 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<!-- Header -->
 <div class="header">
     <div id="corporativo">
         <img src="grey.png" alt="Logo">
         <h1><?php echo t("dashboard_title"); ?></h1>
     </div>
-    <div style="position:absolute; top:15px; right:20px;font-size:10px;">
+    <!-- Top-right: user info and logout -->
+    <div style="position:absolute; top:15px; right:20px; font-size:10px;">
         <?php echo t("hello"); ?>, <?php echo htmlspecialchars($_SESSION['username']); ?>
         <a href="?action=logout" class="boton"><?php echo t("logout"); ?></a>
     </div>
 </div>
+
 <div class="container">
+
+    <!-- Left nav: show only the tables from the chosen department -->
     <div class="nav">
         <h3><?php echo t("tables"); ?></h3>
         <?php foreach ($tables as $table): ?>
-            <a href="?table=<?php echo urlencode($table); ?>" class="<?php echo ($selected_table === $table) ? 'active' : ''; ?>">
-                <?php echo htmlspecialchars($table); ?>
+            <a href="?table=<?php echo urlencode($table); ?>"
+               class="<?php echo ($selected_table === $table) ? 'active' : ''; ?>">
+               <?php echo htmlspecialchars($table); ?>
             </a>
         <?php endforeach; ?>
         <hr>
+        
+        <!-- Optional: Let user “change department” by hitting a small script -->
+        <form action="change_department.php" method="post">
+            <input type="submit" class="btn boton" value="Change Department">
+        </form>
+        
+        <!-- Relaunch importer link -->
         <a href="importador.php" class="btn boton"><?php echo t("relaunch_importer"); ?></a>
     </div>
+
+    <!-- Main content area -->
     <div class="main">
         <?php if ($selected_table): ?>
             <h2><?php echo htmlspecialchars($selected_table); ?> Table</h2>
+            
             <?php if ($crud_message): ?>
                 <p class="message"><?php echo $crud_message; ?></p>
             <?php endif; ?>
+            
             <?php
+            // Get column metadata
             $colsQuery = $db->query("PRAGMA table_info('$selected_table')");
             $columns = [];
             while ($col = $colsQuery->fetchArray(SQLITE3_ASSOC)) {
                 $columns[] = $col;
             }
             ?>
+
+            <!-- CREATE -->
             <?php if ($action === 'create'): ?>
                 <h3><?php echo t("create_new_record"); ?></h3>
                 <form method="post">
                     <?php foreach ($columns as $col):
                         if ($col['name'] === 'id') continue;
                         $colName = $col['name'];
+                        
                         if (isForeignKey($colName)) {
                             list($refTable, $displayCols) = parseForeignKey($colName);
                             ?>
@@ -216,33 +330,50 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             <select name="<?php echo htmlspecialchars($colName); ?>">
                                 <option value="">-- Select --</option>
                                 <?php
-                                $resultFK = $db->query("SELECT id, " . implode(", ", array_map(function($c) { return "\"$c\""; }, $displayCols)) . " FROM \"$refTable\"");
+                                // Build a query to fetch ID + display columns from the referenced table
+                                $fkSql = "SELECT id, " 
+                                       . implode(", ", array_map(fn($c) => "\"$c\"", $displayCols))
+                                       . " FROM \"$refTable\"";
+                                $resultFK = $db->query($fkSql);
                                 while ($rowFK = $resultFK->fetchArray(SQLITE3_ASSOC)) {
-                                    $display = implode(" ", $rowFK);
-                                    echo "<option value='" . htmlspecialchars($rowFK['id']) . "'>" . htmlspecialchars($display) . "</option>";
+                                    $tmp = $rowFK;
+                                    unset($tmp['id']);
+                                    $displayStr = implode(" ", $tmp);
+                                    echo "<option value='" . htmlspecialchars($rowFK['id']) . "'>"
+                                         . htmlspecialchars($displayStr)
+                                         . "</option>";
                                 }
                                 ?>
                             </select>
-                        <?php } else { ?>
+                        <?php 
+                        } else { 
+                        ?>
                             <label><?php echo htmlspecialchars($colName); ?>:</label>
                             <input type="text" name="<?php echo htmlspecialchars($colName); ?>">
                         <?php } ?>
                     <?php endforeach; ?>
                     <input type="submit" name="create" value="<?php echo t("create_new_record"); ?>">
-                    <a href="?table=<?php echo urlencode($selected_table); ?>&action=list" class="btn"><?php echo t("cancel"); ?></a>
+                    <a href="?table=<?php echo urlencode($selected_table); ?>&action=list" class="btn">
+                        <?php echo t("cancel"); ?>
+                    </a>
                 </form>
-            <?php elseif ($action === 'edit' && isset($_GET['id'])):
+
+            <!-- EDIT -->
+            <?php elseif ($action === 'edit' && isset($_GET['id'])): 
                 $id = $_GET['id'];
-                $stmt = $db->prepare("SELECT * FROM \"$selected_table\" WHERE id = :id");
+                $stmt = $db->prepare("SELECT * FROM \"$selected_table\" WHERE id = :id LIMIT 1");
                 $stmt->bindValue(':id', $id, SQLITE3_TEXT);
                 $record = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
-                if ($record): ?>
+                if ($record):
+            ?>
                     <h3><?php echo t("edit_record"); ?></h3>
                     <form method="post">
                         <input type="hidden" name="id" value="<?php echo htmlspecialchars($record['id']); ?>">
+                        
                         <?php foreach ($columns as $col):
                             if ($col['name'] === 'id') continue;
                             $colName = $col['name'];
+                            
                             if (isForeignKey($colName)) {
                                 list($refTable, $displayCols) = parseForeignKey($colName);
                                 ?>
@@ -250,28 +381,49 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <select name="<?php echo htmlspecialchars($colName); ?>">
                                     <option value="">-- Select --</option>
                                     <?php
-                                    $resultFK = $db->query("SELECT id, " . implode(", ", array_map(function($c) { return "\"$c\""; }, $displayCols)) . " FROM \"$refTable\"");
+                                    $fkSql = "SELECT id, " 
+                                            . implode(", ", array_map(fn($c) => "\"$c\"", $displayCols))
+                                            . " FROM \"$refTable\"";
+                                    $resultFK = $db->query($fkSql);
                                     while ($rowFK = $resultFK->fetchArray(SQLITE3_ASSOC)) {
-                                        $display = implode(" ", $rowFK);
+                                        $tmp = $rowFK; 
+                                        unset($tmp['id']);
+                                        $displayStr = implode(" ", $tmp);
                                         $selected = ($record[$colName] == $rowFK['id']) ? 'selected' : '';
-                                        echo "<option value='" . htmlspecialchars($rowFK['id']) . "' $selected>" . htmlspecialchars($display) . "</option>";
+                                        echo "<option value='" . htmlspecialchars($rowFK['id']) . "' $selected>"
+                                             . htmlspecialchars($displayStr)
+                                             . "</option>";
                                     }
                                     ?>
                                 </select>
-                            <?php } else { ?>
+                            <?php 
+                            } else { 
+                            ?>
                                 <label><?php echo htmlspecialchars($colName); ?>:</label>
-                                <input type="text" name="<?php echo htmlspecialchars($colName); ?>" value="<?php echo htmlspecialchars($record[$colName]); ?>">
+                                <input type="text" 
+                                       name="<?php echo htmlspecialchars($colName); ?>" 
+                                       value="<?php echo htmlspecialchars($record[$colName]); ?>">
                             <?php } ?>
                         <?php endforeach; ?>
+                        
                         <input type="submit" name="update" value="<?php echo t("edit_record"); ?>">
-                        <a href="?table=<?php echo urlencode($selected_table); ?>&action=list" class="btn"><?php echo t("cancel"); ?></a>
+                        <a href="?table=<?php echo urlencode($selected_table); ?>&action=list" class="btn">
+                            <?php echo t("cancel"); ?>
+                        </a>
                     </form>
-                <?php endif; ?>
+            <?php 
+                endif; // record check
+            ?>
+
+            <!-- LIST ALL RECORDS -->
             <?php else: ?>
                 <div class="actions">
-                    <a href="?table=<?php echo urlencode($selected_table); ?>&action=create" class="btn"><?php echo t("create_new_record"); ?></a>
+                    <a href="?table=<?php echo urlencode($selected_table); ?>&action=create" class="btn">
+                        <?php echo t("create_new_record"); ?>
+                    </a>
                 </div>
                 <h3><?php echo t("records"); ?></h3>
+                
                 <table>
                     <tr>
                         <?php foreach ($columns as $col): ?>
@@ -288,8 +440,12 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             $colName = $col['name'];
                             if (isForeignKey($colName)) {
                                 list($refTable, $displayCols) = parseForeignKey($colName);
-                                $stmtFK = $db->prepare("SELECT " . implode(", ", array_map(function($c) { return "\"$c\""; }, $displayCols)) . " FROM \"$refTable\" WHERE id = ?");
-                                $stmtFK->bindValue(1, $rowData[$colName], SQLITE3_TEXT);
+                                $stmtFK = $db->prepare("
+                                    SELECT " 
+                                    . implode(", ", array_map(fn($c) => "\"$c\"", $displayCols))
+                                    . " FROM \"$refTable\" WHERE id = :fkid
+                                ");
+                                $stmtFK->bindValue(':fkid', $rowData[$colName], SQLITE3_TEXT);
                                 $resultFK = $stmtFK->execute()->fetchArray(SQLITE3_ASSOC);
                                 $displayText = $resultFK ? implode(" ", $resultFK) : $rowData[$colName];
                                 echo "<td>" . htmlspecialchars($displayText) . "</td>";
@@ -300,12 +456,16 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         echo "<td>";
                         echo "<a href='?table=$selected_table&action=edit&id={$rowData['id']}' class='boton'>Edit</a>";
                         ?>
-                        <form method="post" class="inline" onsubmit="return confirm('<?php echo t("delete_record"); ?>');" style="display:inline;">
+                        <form method="post" class="inline" 
+                              onsubmit="return confirm('<?php echo t("delete_record"); ?>');" 
+                              style="display:inline;">
                             <input type="hidden" name="id" value="<?php echo htmlspecialchars($rowData['id']); ?>">
                             <input type="submit" name="delete" value="Delete">
                         </form>
                         <?php
                         echo "</td>";
+                        
+                        // Métodos
                         echo "<td>";
                         foreach ($columns as $col) {
                             $colName = $col['name'];
@@ -325,6 +485,7 @@ if ($selected_table && $_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
     </div>
 </div>
+
 </body>
 </html>
 

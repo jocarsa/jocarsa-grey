@@ -248,4 +248,71 @@ hr{
 	margin:auto;
 	height:600px !important;
 }
+/* ===================
+   Department Creation
+   =================== */
 
+/* The .importador-container class is already used for the ODS importer.
+   We can reuse it or create new classes for the department creation forms. */
+
+/* ==============================
+   DEPARTMENT SELECTION GRID
+   ============================== */
+/* We rely on an inline style for grid-template-columns now,
+   but still define a fallback or spacing in the CSS. */
+.department-grid-container {
+    display: grid;
+    gap: 20px;
+    max-width: 900px;
+    margin: 30px auto;
+    padding: 20px;
+}
+
+.department-grid-item {
+    background-color: #f1f1f1;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.department-button {
+    background-color: #0073aa;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 15px 20px;
+    cursor: pointer;
+    font-size: 1em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: background-color 0.3s;
+    width:100%;
+}
+.department-button:hover {
+    background-color: #006799;
+}
+
+/* ==============================
+   DEPARTMENT LIST IN INSTALLER
+   ============================== */
+.department-list {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+.department-list th, .department-list td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+.department-list th {
+    background-color: #eee;
+}
+
+/* (Optional) Additional styling for the "importador-container" 
+   if you'd like the existing department listing to look nice. */
+.letra{
+	font-size:90px;
+	font-weight:bold;
+}
